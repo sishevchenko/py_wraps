@@ -9,6 +9,11 @@ use crate::frozen::NONE_REPR;
 
 type PyObjHash = isize;
 
+/// Обертка для результата выполнения `Python` функций в специальный объект `Result`, который подавляет потенциальные ошибки обернутых в него функций и позволяет их гибко обрабатывать, не приводя к мгновенному возбуждению исключения для его корректной обработки на уровне с достаточным количеством полномочий.
+///
+///Примечания:
+///- Дополнительную информацию по практике использования `Result` можно найти в интернете по запросу **_Result pattern_**
+///- За рефференс был взят [Result](https://doc.rust-lang.org/std/result/enum.Result.html) из `Rust` и частично из `Java`
 #[pyclass(module = "py_wraps")]
 #[derive(Debug)]
 pub struct Result {
@@ -47,6 +52,7 @@ impl Result {
 // Реализация доступная из Python по FFI
 #[pymethods]
 impl Result {
+    /// Создает новый `Python` объект типа `Result`
     #[new]
     #[pyo3(signature=(ok=None, err=None))]
     fn new(ok: Option<Py<PyAny>>, err: Option<Py<PyBaseException>>) -> PyResult<Self> {
@@ -60,6 +66,7 @@ impl Result {
         }
     }
 
+    /// Преобразует вызов функции, которая может вызвать исключение в тип `Result`
     #[classmethod]
     #[pyo3(signature=(func, *, args=None, kwargs=None))]
     fn wrap(_cls: Py<PyType>, func: Py<PyFunction>, args: Option<Py<PyTuple>>, kwargs: Option<Bound<'_, PyDict>>) -> PyResult<Self> {
@@ -76,26 +83,31 @@ impl Result {
         })
     }
 
+    /// Проверка на успешность полученного результат
     fn is_ok(&self) -> bool {
         !self._err.is_some()
     }
 
+    /// Проверка на наличие ошибки в `Result`
     fn is_err(&self) -> bool {
         self._err.is_some()
     }
 
+    /// Получить результат потенциального успешного выполнения
     fn ok(&self) -> Option<Py<PyAny>> {
         Python::attach(|py| {
             self._ok.as_ref().map(|ok| ok.clone_ref(py))
         })
     }
 
+    /// Получить ошибку потенциально возникшую в результате выполнения
     fn err(&self) -> Option<Py<PyBaseException>> {
         Python::attach(|py| {
             self._err.as_ref().map(|err| err.clone_ref(py))
         })
     }
 
+    /// Получить результат успешного выполнения или сгенерировать ошибку возникшую в результате выполнения
     #[pyo3(signature=())]
     fn unwrap(&self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
         match (&self._ok, &self._err) {
@@ -112,12 +124,14 @@ impl Result {
         }
     }
 
+    /// Получить результат успешного выполнения или значение по умолчанию
     fn unwrap_or(&self, default: Py<PyAny>) -> Option<Py<PyAny>> {
         Python::attach(|py| {
             self.unwrap(py).unwrap_or(Some(default))
         })
     }
 
+    /// Получить результат успешного выполнения или выполнить дополнительную функцию и вернуть ее результат как значение по умолчанию
     #[pyo3(signature=(func))]
     fn unwrap_or_else(&self, py: Python<'_>, func: Py<PyFunction>) -> PyResult<Option<Py<PyAny>>> {
         match self.unwrap(py) {
@@ -129,6 +143,7 @@ impl Result {
         }
     }
 
+    /// Получить результат ошибки выполнения или сгенерировать ошибку успешного выполнения
     #[pyo3(signature=())]
     fn unwrap_err(&self, py: Python<'_>) -> PyResult<Py<PyBaseException>>{
         match &self._err {
@@ -140,6 +155,7 @@ impl Result {
         }
     }
 
+    /// Получить обработчик для ошибки
     #[pyo3(signature=(err, mapped_handlers))]
     fn get_err_handler(&self, py: Python<'_>, err: Py<PyBaseException>, mapped_handlers: Py<PyDict>) -> PyResult<Option<Py<PyFunction>>> {
         let hash = self.get_py_hash(py, err.as_any())?;
@@ -160,6 +176,7 @@ impl Result {
         }
     }
 
+    /// Развернуть результат или сопоставить ошибку выполнения с переданными обработчиками и вернуть результат обработчика
     #[pyo3(signature=(mapped_handlers), name="match")]
     fn _match(&self, py: Python<'_>, mapped_handlers: Py<PyDict>) -> PyResult<Option<Py<PyAny>>> {
         match &self.err() {
@@ -183,6 +200,7 @@ impl Result {
         }
     }
 
+    /// Добавить обработчик для потенциальной ошибки
     #[pyo3(signature=(err, handler))]
     fn add_err_handler(&mut self, py: Python<'_>, err: Py<PyType>, handler: Py<PyFunction>) -> PyResult<()> {
         match err.bind(py).is_subclass_of::<PyBaseException>()? {
@@ -199,6 +217,7 @@ impl Result {
         }
     }
 
+    /// Добавить обработчики для потенциально возникших ошибок
     #[pyo3(signature=(mapped_handlers))]
     fn add_err_handlers(&mut self, py: Python<'_>, mapped_handlers: Py<PyDict>) -> PyResult<()> {
         for (exc, handler) in mapped_handlers.bind(py).iter() {
@@ -213,6 +232,7 @@ impl Result {
         Ok(())
     }
 
+    /// Развернуть результат с помощью обработчиков ошибок
     #[pyo3(signature=())]
     fn unwrap_with_handlers(&self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
         match self.err() {
@@ -234,6 +254,7 @@ impl Result {
         }
     }
 
+    /// Развернуть результат с помощью обработчиков ошибок или при отсутствии обработчика вернуть значение по умолчанию
     #[pyo3(signature=(default))]
     fn unwrap_with_handlers_or(&self, py: Python<'_>, default: Py<PyAny>) -> Option<Py<PyAny>> {
         let unwrapped = self.unwrap_with_handlers(py);
@@ -243,6 +264,7 @@ impl Result {
         }
     }
 
+    /// Развернуть результат с помощью обработчиков ошибок или при отсутствии обработчика выполнить дополнительную функцию и вернуть ее результат как значение по умолчанию
     #[pyo3(signature=(func))]
     fn unwrap_with_handlers_or_else(&self, py: Python<'_>, func: Py<PyFunction>) -> PyResult<Option<Py<PyAny>>> {
         match self.unwrap_with_handlers(py) {
@@ -254,6 +276,7 @@ impl Result {
         }
     }
 
+    /// Проверка на наличие обработчика для ошибки содержащейся в результате
     #[pyo3(signature=())]
     fn is_err_handled(&self, py: Python<'_>) -> PyResult<bool> {
         match self.err() {
@@ -272,6 +295,7 @@ impl Result {
         }
     }
 
+    /// Получить тип ошибки в результате
     #[pyo3(signature=())]
     fn err_type(&self, py: Python<'_>) -> PyResult<Option<Py<PyType>>> {
         match self.err() {
@@ -280,6 +304,11 @@ impl Result {
         }
     }
 
+    /// Проверить на соответствие тип ошибки в результате переданному типу
+    ///
+    /// Примечания:
+    ///
+    /// Если в результате `ok`, то всегда `false`
     #[pyo3(signature=(err_type))]
     fn check_err_type(&self, py: Python<'_>, err_type: Py<PyType>) -> PyResult<bool> {
         match self.err() {
