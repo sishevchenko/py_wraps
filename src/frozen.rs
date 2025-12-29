@@ -1,1 +1,1 @@
-pub static NONE_REPR: &str = "None";
+pub(crate) static NONE_REPR: &str = "None";
