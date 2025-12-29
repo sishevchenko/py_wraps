@@ -7,6 +7,15 @@ py_wrap - это библиотека для оборачивания резул
 - Дополнительную информацию по практике использования `Result` можно найти в интернете по запросу **_Result pattern_**
 - За рефференс был взят [Result](https://doc.rust-lang.org/std/result/enum.Result.html) из `Rust` и частично реализация из `Java`
 
+## Инструкция по установке (pip)
+
+```bash
+python3 -m venv .venv
+source ./.venv/bin/activate
+pip install maturin
+maturin develop
+```
+
 ## Примеры использования
 
 1. Преобразуем вызов функции, которая приводит к ошибке к `Result`
