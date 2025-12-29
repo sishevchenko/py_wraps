@@ -21,6 +21,9 @@ maturin develop
 1. Преобразуем вызов функции, которая приводит к ошибке к `Result`
 
     ```python
+    from py_wrap import Result
+
+
     def exc_func():
         ...
         if some:
@@ -33,6 +36,9 @@ maturin develop
 2. Базовый функционал
 
     ```python
+    from py_wrap import Result
+
+
     def f(x: int) -> Result[int, ValueError]:
         if x < 0:
             return Result(err=ValueError("x must be greatest zero"))
